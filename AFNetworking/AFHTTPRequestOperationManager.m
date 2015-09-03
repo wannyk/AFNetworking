@@ -164,7 +164,7 @@
 
 - (AFHTTPRequestOperation *)OPTIONS:(NSString *)URLString
                          parameters:(id)parameters
-                            success:(void (^)(AFHTTPRequestOperation *operation))success
+                            success:(void (^)(AFHTTPRequestOperation *operation, id responseObject))success
                             failure:(void (^)(AFHTTPRequestOperation *operation, NSError *error))failure
 {
     AFHTTPRequestOperation *operation = [self HTTPRequestOperationWithHTTPMethod:@"OPTIONS" URLString:URLString parameters:parameters success:^(AFHTTPRequestOperation *requestOperation, __unused id responseObject) {
