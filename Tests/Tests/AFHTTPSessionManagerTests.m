@@ -54,7 +54,8 @@
     XCTestExpectation *expectation = [self expectationWithDescription:@"Request should succeed"];
 
     NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:@"/get" relativeToURL:self.baseURL]];
-    NSURLSessionDataTask *task = [self.manager dataTaskWithRequest:request completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
+    NSURLSessionDataTask *task = [self.manager dataTaskWithRequest:request uploadProgress:nil downloadProgress:nil
+                                                 completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
         blockResponseObject = responseObject;
         blockError = error;
         [expectation fulfill];
@@ -75,7 +76,8 @@
     XCTestExpectation *expectation = [self expectationWithDescription:@"Request should succeed"];
 
     NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:@"/status/404" relativeToURL:self.baseURL]];
-    NSURLSessionDataTask *task = [self.manager dataTaskWithRequest:request completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
+    NSURLSessionDataTask *task = [self.manager dataTaskWithRequest:request uploadProgress:nil downloadProgress:nil
+                                                 completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
         blockError = error;
         [expectation fulfill];
     }];
@@ -94,8 +96,9 @@
 
     XCTestExpectation *expectation = [self expectationWithDescription:@"Request should succeed"];
 
-    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:@"/redirect/1" relativeToURL:self.baseURL]];
-    NSURLSessionDataTask *task = [self.manager dataTaskWithRequest:request completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
+    NSURLRequest *redirectRequest = [NSURLRequest requestWithURL:[NSURL URLWithString:@"/redirect/1" relativeToURL:self.baseURL]];
+    NSURLSessionDataTask *redirectTask = [self.manager dataTaskWithRequest:redirectRequest uploadProgress:nil downloadProgress:nil
+                                                         completionHandler:^(NSURLResponse *response, id responseObject, NSError *error) {
         blockError = error;
         [expectation fulfill];
     }];
@@ -108,11 +111,11 @@
         return request;
     }];
 
-    [task resume];
+    [redirectTask resume];
 
     [self waitForExpectationsWithTimeout:10.0 handler:nil];
 
-    XCTAssertTrue(task.state == NSURLSessionTaskStateCompleted);
+    XCTAssertTrue(redirectTask.state == NSURLSessionTaskStateCompleted);
     XCTAssertNil(blockError);
     XCTAssertTrue(success);
 }
@@ -511,7 +514,7 @@
 
 # pragma mark - Server Trust
 
-- (void)testInvalidServerTrustProducesCorrectError {
+- (void)testInvalidServerTrustProducesCorrectErrorForCertificatePinning {
     __weak XCTestExpectation *expectation = [self expectationWithDescription:@"Request should fail"];
     NSURL *googleCertificateURL = [[NSBundle bundleForClass:[self class]] URLForResource:@"google.com" withExtension:@"cer"];
     NSData *googleCertificateData = [NSData dataWithContentsOfURL:googleCertificateURL];
@@ -519,7 +522,7 @@
     [manager setResponseSerializer:[AFHTTPResponseSerializer serializer]];
     manager.securityPolicy = [AFSecurityPolicy policyWithPinningMode:AFSSLPinningModeCertificate withPinnedCertificates:[NSSet setWithObject:googleCertificateData]];
     [manager
-     GET:@"AFNetworking/AFNetworking"
+     GET:@""
      parameters:nil
      progress:nil
      success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
@@ -528,7 +531,31 @@
      }
      failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
          XCTAssertEqualObjects(error.domain, NSURLErrorDomain);
-         XCTAssertEqual(error.code, NSURLErrorServerCertificateUntrusted);
+         XCTAssertEqual(error.code, NSURLErrorCancelled);
+         [expectation fulfill];
+     }];
+    [self waitForExpectationsWithCommonTimeoutUsingHandler:nil];
+    [manager invalidateSessionCancelingTasks:YES];
+}
+
+- (void)testInvalidServerTrustProducesCorrectErrorForPublicKeyPinning {
+    __weak XCTestExpectation *expectation = [self expectationWithDescription:@"Request should fail"];
+    NSURL *googleCertificateURL = [[NSBundle bundleForClass:[self class]] URLForResource:@"google.com" withExtension:@"cer"];
+    NSData *googleCertificateData = [NSData dataWithContentsOfURL:googleCertificateURL];
+    AFHTTPSessionManager *manager = [[AFHTTPSessionManager alloc] initWithBaseURL:[NSURL URLWithString:@"https://apple.com/"]];
+    [manager setResponseSerializer:[AFHTTPResponseSerializer serializer]];
+    manager.securityPolicy = [AFSecurityPolicy policyWithPinningMode:AFSSLPinningModePublicKey withPinnedCertificates:[NSSet setWithObject:googleCertificateData]];
+    [manager
+     GET:@""
+     parameters:nil
+     progress:nil
+     success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+         XCTFail(@"Request should fail");
+         [expectation fulfill];
+     }
+     failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+         XCTAssertEqualObjects(error.domain, NSURLErrorDomain);
+         XCTAssertEqual(error.code, NSURLErrorCancelled);
          [expectation fulfill];
      }];
     [self waitForExpectationsWithCommonTimeoutUsingHandler:nil];
